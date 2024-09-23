@@ -23,10 +23,14 @@ from llama_index.core.selectors import (
     PydanticSingleSelector,
 )
 from llama_index.core.response_synthesizers import TreeSummarize
-
+from dotenv import load_dotenv
 import numpy as np
-from google.colab import userdata
 import nest_asyncio
+import os
+
+load_dotenv()
+nest_asyncio.apply()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 nest_asyncio.apply()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,9 +52,9 @@ class IntegratedKnowledgeBaseQuery:
 
     def _setup_graph_store(self):
         return Neo4jPropertyGraphStore(
-            username='neo4j',
-            password="OElVwVRWZrzzBcixKCCqug5Vq8zGousVjXcH-4VObgI",
-            url="neo4j+s://2de8f971.databases.neo4j.io",
+            url = os.getenv('NEO4J_URL'),
+            username = "neo4j",
+            password = os.getenv('NEO4J_PASSWORD'),
             database="neo4j",
             refresh_schema=False,
             sanitize_query_output=True
@@ -69,9 +73,9 @@ class IntegratedKnowledgeBaseQuery:
 
     def _setup_vector_store(self):
         return QdrantVectorStore(
-            url="https://a37d5f20-649a-4cd7-80ea-295b1a098e9b.europe-west3-0.gcp.cloud.qdrant.io:6333",
-            api_key="u3o0a6HGagT1wkbpr_urztcSbz66kEX3_kVV1BiQXZ2hODiYYOtNzQ",
-            collection_name="legislative_docs",
+            url=os.getenv("QDRANT_URL"),
+            api_key=os.getenv("QDRANT_API_KEY"),
+            collection_name="law_docs",
         )
 
     def _setup_index(self):
@@ -294,7 +298,7 @@ async def main():
             break
         response = await kb_query.query_knowledge_base(query)
         print(response)
-        print("\n" + "=" * 100 + "\n")
+        print("\n" + "=" * 10 + "\n")
 
 if __name__ == "__main__":
     import asyncio
