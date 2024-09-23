@@ -1,0 +1,17 @@
+# requirements.txt
+
+Flask
+Flask-SocketIO
+llama-index
+fastembed
+groq
+numpy
+neo4j
+qdrant-client
+python-dotenv
+llama-index-graph-stores-neo4j
+llama-parse
+llama-index-vector-stores-qdrant
+llama-index-embeddings-fastembed
+llama-index-llms-groq
+matplotlib
