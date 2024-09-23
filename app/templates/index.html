@@ -1,0 +1,15 @@
+<!-- app/templates/index.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="chat-container">
+        <div id="messages" class="messages"></div>
+        <div class="chat-input">
+            <textarea id="query-input" placeholder="Enter your query here..."></textarea>
+            <button id="submit-query">Submit Query</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
