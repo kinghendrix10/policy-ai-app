@@ -69,7 +69,7 @@ class IntegratedKnowledgeBaseQuery:
         return QdrantVectorStore(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
-            collection_name="law_docs",
+            collection_name="legislative_docs",
         )
 
     def _setup_index(self):
@@ -111,134 +111,118 @@ class IntegratedKnowledgeBaseQuery:
             logging.info(record['n'])
 
     def _diagnose_vector_store(self):
-        collection_info = self.vector_store.client.get_collection(collection_name="law_docs")
+        collection_info = self.vector_store.client.get_collection(collection_name="legislative_docs")
         logging.info(f"Vector store collection info: {collection_info}")
 
-    def format_case_details(self, results: List[Dict]) -> str:
-        if not results:
-            return "No case found with the given ID."
-
-        case = results[0]['c']
-        formatted_result = f"Case: {case.get('case_name', 'Unknown')}\n"
-        formatted_result += f"Date Filed: {case.get('date_filed', 'Unknown')}\n"
-        formatted_result += f"Court: {results[0]['court'].get('short_name', 'Unknown')}\n"
-        formatted_result += f"Judges: {', '.join([j['name'] for j in results[0]['judges']])}\n"
-        formatted_result += f"Author: {results[0]['author'].get('name', 'Unknown') if results[0]['author'] else 'Unknown'}\n"
-        formatted_result += f"Attorneys: {', '.join([a['name'] for a in results[0]['attorneys']])}\n"
-        formatted_result += f"Plaintiff: {results[0]['plaintiff'].get('name', 'Unknown') if results[0]['plaintiff'] else 'Unknown'}\n"
-        formatted_result += f"Defendant: {results[0]['defendant'].get('name', 'Unknown') if results[0]['defendant'] else 'Unknown'}\n"
-        formatted_result += f"Citations: {', '.join([c['text'] for c in results[0]['citations']])}\n"
-        formatted_result += f"Opinion Type: {results[0]['opinion'].get('type', 'Unknown') if results[0]['opinion'] else 'Unknown'}\n"
-        formatted_result += f"Docket Number: {results[0]['docket'].get('id', 'Unknown') if results[0]['docket'] else 'Unknown'}\n"
-
-        return formatted_result
-
-    def get_case_details(self, case_id):
+    def query_graph_store(self, query: str) -> List[Dict[str, Any]]:
+        entities = re.findall(r'\b(?:C-\d+|Bill C-\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', query, re.IGNORECASE)
+        logging.info(f"Entities found: {entities}")
         cypher_query = """
-        MATCH (c:Case {id: $case_id})
-        OPTIONAL MATCH (c)-[:DECIDED_BY]->(j:Judge)
-        OPTIONAL MATCH (c)-[:AUTHORED_BY]->(a:Judge)
-        OPTIONAL MATCH (c)-[:HEARD_IN]->(ct:Court)
-        OPTIONAL MATCH (c)-[:REPRESENTED_BY]->(att:Attorney)
-        OPTIONAL MATCH (p:Party)-[:FILED_CASE]->(c)
-        OPTIONAL MATCH (c)-[:AGAINST]->(d:Party)
-        OPTIONAL MATCH (c)-[:CITED_BY_BYCITED_BYit:Citation)
-        OPTIONAL MATCH (c)-[:HAS_OPINION]->(o:Opinion)
-        OPTIONAL MATCH (c)-[:HAS_DOCKET]->(docket:Docket)
-        RETURN c, collect(DISTINCT j) as judges, a as author, ct as court,
-               collect(DISTINCT att) as attorneys, p as plaintiff, d as defendant,
-               collect(DISTINCT cit) as citations, o as opinion, docket
+        MATCH (e)
+        WHERE toLower(e.name) CONTAINS toLower($entity_name)
+        OPTIONAL MATCH (e)-[r]-(related)
+        RETURN e as entity, type(r) as relationship_type, related
+        LIMIT 5
         """
-        results = self.graph_store.structured_query(cypher_query, {"case_id": case_id})
-        return results
-
-    def format_graph_results(self, query):
-        cypher_query = """
-                MATCH (e)
-                WHERE e.name CONTAINS $entity_name
-                OPTIONAL MATCH (e)-[r]-(related)
-                RETURN e as entity, type(r) as relationship_type, related
-                LIMIT 10
-                """
-        # Extract key entities from the query
-        entities = re.findall(r'\b[A-Z][a-z]+ (?:[A-Z][a-z]+ )*(?:Co\.|Corporation|Inc\.|LLC)\b|\b[A-Z][a-z]+\b', query)
 
         graph_results = []
-        case_details = []
         for entity in entities:
-            results = self.graph_store.structured_query(cypher_query, {"entity_name": entity})
-            graph_results.extend(results)
-            # Check if any of the results are Case nodes
-            for result in results:
-                if 'Case' in result['entity'].get('labels', []):
-                    case_id = result['entity_id']
-                    case_detail = self.get_case_details(case_id)
-                    if case_detail:
-                        formatted_case = self.format_case_details(case_detail)
-                        case_details.append(formatted_case)
+            params = {"entity_name": entity}
+            try:
+                results = self.graph_store.structured_query(cypher_query, params)
+                graph_results.extend(results)
+            except Exception as e:
+                logging.error(f"Error querying graph store for entity '{entity}': {str(e)}")
+
+        return graph_results
+
+    def get_bill_details(self, bill_id: str) -> List[Dict[str, Any]]:
+        cypher_query = """
+        MATCH (b:Bill {id: $bill_id})
+        OPTIONAL MATCH (b)-[:AMENDS]->(a:Act)
+        OPTIONAL MATCH (b)-[:CONTAINS]->(p:Provision)
+        OPTIONAL MATCH (b)-[:DEFINES]->(d:Definition)
+        OPTIONAL MATCH (b)-[:INVOLVED]->(person:Person)
+        OPTIONAL MATCH (b)-[:RELATES_TO]->(act:Act)
+        OPTIONAL MATCH (b)-[:AFFECTS]->(affected)
+        RETURN b as bill,
+              collect(DISTINCT a) as amendments,
+              collect(DISTINCT p) as provisions,
+              collect(DISTINCT d) as definitions,
+              collect(DISTINCT person) as persons_involved,
+              collect(DISTINCT act) as related_acts,
+              collect(DISTINCT {type: labels(affected)[0], details: properties(affected)}) as affected_entities
+        """
+        results = self.graph_store.structured_query(cypher_query, {"bill_id": bill_id})
+        return results
+
+
+    def format_graph_results(self, query: str) -> tuple:
+        graph_results = self.query_graph_store(query)
+        logging.info(f"format_graph_results function: {graph_results}")
+        if not graph_results:
+            return "No relevant information found in the graph database.", []
+
         formatted_results = []
-        for graph_result in graph_results:
-            entity = graph_result.get('entity', {})
-            rel_type = graph_result.get('relationship_type')
-            related = graph_result.get('related', {})
+        bill_details = []
+        for result in graph_results:
+            entity = result['entity']
+            relationship = result['relationship_type']
+            related = result['related']
 
-            entity_name = entity.get('name', 'Unknown')
-            entity_type = next(iter(entity.get('labels', [])), 'Unknown')
-            formatted_result = f"- {entity_name} ({entity_type})"
-
-            if rel_type and related:
+            formatted_result = f"{entity.get('type', 'Entity')} {entity.get('name', 'Unknown')}"
+            if relationship and related:
                 related_name = related.get('name', 'Unknown')
-                related_type = next(iter(related.get('labels', [])), 'Unknown')
-                formatted_result += f"\n  {rel_type} {related_name} ({related_type})"
+                formatted_result += f"\n  {relationship}: {related_name}"
 
             formatted_results.append(formatted_result)
 
-        return "\n".join(formatted_results), case_details
+            if entity.get('type') == 'Bill':
+                bill_detail = self.get_bill_details(entity.get('name'))
+                if bill_detail:
+                    formatted_bill = self.format_bill_details(bill_detail)
+                    bill_details.append(formatted_bill)
+
+        return "\n\n".join(formatted_results), bill_details
 
     def format_vector_results(self, query) -> str:
         query_vector = self.embed_model.get_text_embedding(query)
         vector_results = self.vector_store.client.search(
-            collection_name="law_docs",
+            collection_name="legislative_docs",
             query_vector=query_vector,
-            limit=3
+            limit=2
         )
         formatted_results = []
         for i, result in enumerate(vector_results, 1):
-            # Access the payload and score attributes directly
-              payload = result.payload
-              score = result.score
-              # Assuming 'content' is a field in your payload
-              node_content = json.loads(result.payload['_node_content'])
-              content = node_content.get('text', '')
-              formatted_results.append(f"Document {i} (Score: {score:.4f}):\n{content[:300]}...")
+            payload = result.payload
+            score = result.score
+            node_content = json.loads(result.payload['_node_content'])
+            content = node_content.get('text', '')
+            formatted_results.append(f"Document {i} (Score: {score:.4f}):\n{content[:300]}...")
         return "\n".join(formatted_results)
 
-    def generate_llm_response(self, query: str, response: str, graph_results: List[Dict], vector_results: List[Dict], case_details: List[str]) -> str:
-        graph_context = graph_results
-        vector_context = vector_results
-
-        prompt = f"""You are a highly knowledgeable Legal AI assistant specializing in analyzing court cases and legal precedents. Your task is to provide a very short and accurate response to the following query based on the information data provided.
+    async def generate_llm_response(self, query: str, response: str, graph_results: str, vector_results: str, bill_details: List[str]) -> str:
+        prompt = f"""You are a highly knowledgeable Legal AI assistant specializing in analyzing legislative documents and bills. Your task is to provide a short and accurate response to the following query based on the information from both a graph database and a vector database.
 
         Query: {query}
 
-        Data: {response}
+        Initial Response: {response}
 
-        Knowledgebase Context: {graph_context} + {vector_context}
+        Knowledge Context: {graph_results} + {vector_results}
 
-        Case Details: {case_details}
+        Bill Details: {bill_details}
 
         Instructions:
-        1. Analyze the Knowledgebase context, data and specific case details, extracting all relevant information related to the query.
+        1. Analyze all provided contexts, extracting all relevant information related to the query.
         2. Provide a clear, concise, and well-structured response that directly addresses the query.
-        3. Include specific details such as case names, courts, judges, plaintiffs, defendants, attorneys, dates filed, decision dates, case outcomes, judicial opinions and legal principles when available in any of the contexts but do not use the term 'document' or 'context' in your response.
-        4. If the contexts contain information about multiple related cases or legal issues, combine and summarize them briefly and explain their relevance to the query.
+        3. Include specific details such as bill numbers, dates, amendments, key provisions, and related entities when available in any context.
+        4. If the contexts contain information about multiple related bills or legal issues, summarize each one briefly and explain their relevance to the query.
         5. If there are any conflicting opinions or interpretations in the contexts, present them objectively and explain the implications.
         6. Use legal terminology accurately, but also provide explanations for complex terms to ensure clarity.
         7. If the contexts don't provide sufficient information to fully answer the query, clearly state what is known and what information is missing.
-        8. Do not refer to the query, documents and contexts directly in your answer; instead, incorporate the information seamlessly into your response by saying "Based on my knowledge ...".
-        9. Do not make assumptions or include information not present in the given contexts.
-        10. Conclude your response with a brief summary of the key points.
-        11. After your main response, suggest two follow-up questions that would be relevant for further exploration of the topic, prefaced with "For further exploration, you might consider asking:".
+        8. Do not make assumptions or include information not present in the given contexts.
+        9. Conclude your response with a brief summary of the key points.
+        10. After your main response, suggest two follow-up questions that would be relevant for further exploration of the topic, prefaced with "For further exploration, you might consider asking:".
 
         Remember to maintain an objective, professional tone throughout your response. Do not refer to the query or contexts directly in your answer; instead, incorporate the information seamlessly into your response.
 
@@ -246,7 +230,7 @@ class IntegratedKnowledgeBaseQuery:
 
         llm_output = self.llm.complete(prompt).text
         return llm_output
-
+        
     def query_knowledge_base(self, query: str) -> str:
         logging.info(f"Querying knowledge base: {query}")
         
@@ -292,16 +276,16 @@ class IntegratedKnowledgeBaseQuery:
         # Create tools
         graph_tool = QueryEngineTool.from_defaults(
             query_engine=graph_query_engine,
-            description="Useful for answering questions about relationships and connections between legal entities, cases, and concepts",
+            description="Useful for answering questions about relationships and connections between entities",
         )
 
         vector_tool = QueryEngineTool.from_defaults(
             query_engine=vector_query_engine,
-            description="Useful for answering detailed questions about legal content, precedents, and case details",
+            description="Useful for answering detailed questions about legal content",
         )
 
         TREE_SUMMARIZE_PROMPT_TMPL = (
-            """You are a helpful legal AI assistant specialized in understanding the legal enquiries"""
+            """You are a helpful legal AI assistant specialized in understanding the legislative enquiries"""
         )
         
         tree_summarize = TreeSummarize(
