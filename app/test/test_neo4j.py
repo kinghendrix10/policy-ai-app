@@ -5,7 +5,7 @@ import re
 
 load_dotenv()
 
-query = 'Cases involving Judge Molley'
+query = 'Bills related to the Racialized Communities'
 
 cypher_query = """
         MATCH (e)
