@@ -75,7 +75,7 @@ class IntegratedKnowledgeBaseQuery:
         return QdrantVectorStore(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
-            collection_name="law_docs",
+            collection_name="legislative_docs",
         )
 
     def _setup_index(self):
