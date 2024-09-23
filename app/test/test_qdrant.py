@@ -24,7 +24,7 @@ qdrant_client = QdrantClient(
 
 vector_store = QdrantVectorStore(
     client=qdrant_client,
-    collection_name="law_docs",
+    collection_name="legislative_docs",
 )
 
 def format_vector_results(query) -> str:
