@@ -30,7 +30,7 @@ vector_store = QdrantVectorStore(
 def format_vector_results(query) -> str:
     query_vector = embed_model.get_text_embedding(query)
     vector_results = qdrant_client.search(
-        collection_name="law_docs",
+        collection_name="legislative_docs",
         query_vector=query_vector,
         limit=3
     )

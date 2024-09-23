@@ -4,14 +4,27 @@
 
 The CanPolicy AI Knowledge Base is a Flask application integrated with SocketIO that provides a powerful knowledge base query system using Neo4j and Qdrant. The application allows users to query legislative information and receive detailed responses based on the integrated knowledge base.
 
+## Configuration
+
+The application uses environment variables to manage configuration settings. Create a `.env` file in the root directory of the project and add the following environment variables:
+
+```
+SECRET_KEY=your_secret_key
+GROQ_API_KEY=your_groq_api_key
+NEO4J_URL=your_neo4j_url
+NEO4J_PASSWORD=your_neo4j_password
+QDRANT_URL=your_qdrant_url
+QDRANT_API_KEY=your_qdrant_api_key
+```
+
 ## Installation
 
 To set up the environment and install dependencies, follow these steps:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/kinghendrix10/policy-ai-app.git
-   cd policy-ai-app
+   git clone https://github.com/kinghendrix10/legal-ai-app.git
+   cd legal-ai-app
    ```
 
 2. Create a virtual environment:
@@ -52,19 +65,6 @@ The web interface is built using Flask and SocketIO. It provides a user-friendly
 - `app/templates/index.html`: The main HTML template for the application.
 - `app/static/css/style.css`: The CSS file for styling the application.
 - `app/static/js/main.js`: The JavaScript file for handling user interactions.
-
-## Configuration
-
-The application uses environment variables to manage configuration settings. Create a `.env` file in the root directory of the project and add the following environment variables:
-
-```
-SECRET_KEY=your_secret_key
-GROQ_API_KEY=your_groq_api_key
-NEO4J_URL=your_neo4j_url
-NEO4J_PASSWORD=your_neo4j_password
-QDRANT_URL=your_qdrant_url
-QDRANT_API_KEY=your_qdrant_api_key
-```
 
 ## Contributing
 

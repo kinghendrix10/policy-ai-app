@@ -12,8 +12,6 @@ from llama_index.core.indices.keyword_table import KeywordTableIndex
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from llama_index.llms.groq import Groq
 from llama_index.core import Settings, PropertyGraphIndex
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from llama_index.core import PromptTemplate
 from llama_index.core.tools import QueryEngineTool
 from llama_index.core.query_engine import RouterQueryEngine
@@ -45,7 +43,7 @@ class IntegratedKnowledgeBaseQuery:
     def _initialize_components(self):
         embed_model = FastEmbedEmbedding(model_name="BAAI/bge-small-en-v1.5")
         Settings.embed_model = embed_model
-        llm = Groq(model="llama3-70b-8192", api_key=userdata.get('GROQ_API_KEY'), temperature=0)
+        llm = Groq(model="llama3-70b-8192", api_key=os.getenv('GROQ_API_KEY'), temperature=0)
         Settings.llm = llm
 
         return embed_model, llm
