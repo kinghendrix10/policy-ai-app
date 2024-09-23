@@ -1,3 +1,5 @@
+# app/knowledge_base/integrated_kb_query.py
+
 import logging
 from typing import List, Dict, Any
 import json
@@ -115,11 +117,11 @@ class IntegratedKnowledgeBaseQuery:
         logging.info(f"Vector store collection info: {collection_info}")
 
     def query_graph_store(self, query: str) -> List[Dict[str, Any]]:
-        entities = re.findall(r'\b(?:C-\d+|Bill C-\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', query, re.IGNORECASE)
+        entities = re.findall(r'\b[A-Z][a-z]+ (?:[A-Z][a-z]+ )*(?:Co\.|Corporation|Inc\.|LLC)\b|\b[A-Z][a-z]+\b', query)
         logging.info(f"Entities found: {entities}")
         cypher_query = """
         MATCH (e)
-        WHERE toLower(e.name) CONTAINS toLower($entity_name)
+        WHERE e.name CONTAINS $entity_name
         OPTIONAL MATCH (e)-[r]-(related)
         RETURN e as entity, type(r) as relationship_type, related
         LIMIT 5
@@ -201,7 +203,7 @@ class IntegratedKnowledgeBaseQuery:
             formatted_results.append(f"Document {i} (Score: {score:.4f}):\n{content[:300]}...")
         return "\n".join(formatted_results)
 
-    async def generate_llm_response(self, query: str, response: str, graph_results: str, vector_results: str, bill_details: List[str]) -> str:
+    def generate_llm_response(self, query: str, response: str, graph_results: str, vector_results: str, bill_details: List[str]) -> str:
         prompt = f"""You are a highly knowledgeable Legal AI assistant specializing in analyzing legislative documents and bills. Your task is to provide a short and accurate response to the following query based on the information from both a graph database and a vector database.
 
         Query: {query}
